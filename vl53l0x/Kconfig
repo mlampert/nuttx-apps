@@ -1,0 +1,33 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config VL53L0X
+	tristate "VL53L0X test application"
+	default n
+  depends on HAVE_CXX
+	---help---
+		Enable the VL53L0X test application
+
+
+#if VL53L0X
+#
+#config VL53L0X_PROGNAME
+#	string "Program name"
+#	default "vl53l0x"
+#	depends on BUILD_LOADABLE
+#	---help---
+#		This is the name of the program that will be use when the NSH ELF
+#		program is installed.
+#
+#config VL53L0X_PRIORITY
+#	int "vl53l0x task priority"
+#	default 100
+#
+#config VL53L0X_STACKSIZE
+#	int "vl53l0x stack size"
+#	default 2048
+#
+#endif
+
