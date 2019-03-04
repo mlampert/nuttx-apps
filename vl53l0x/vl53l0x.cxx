@@ -1,14 +1,18 @@
+#include "fbdev.h"
+
 #include <nuttx/config.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <graphics/lvgl.h>
 #include <nuttx/sensors/vl53l0x.h>
 #include <platform/cxxinitialize.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <time.h>
 
-#define STATE_QUIT 0x01
+#define STATE_RUN  0x01
 #define STATE_STOP 0x02
+#define STATE_LOG  0x04
 
 extern "C"
 {
@@ -19,15 +23,29 @@ int main(int argc, FAR char *argv[])
 int vl53l0x_main(int argc, char *argv[])
 #endif
 {
-  uint8_t state = 0;
+  lv_disp_drv_t disp_drv;
+
+  lv_init();
+  fbdev_init(true);
+
+  lv_disp_drv_init(&disp_drv);
+  disp_drv.disp_flush = fbdev_flush;
+  disp_drv.disp_fill = fbdev_fill;
+  disp_drv.disp_map = fbdev_map;
+  lv_disp_drv_register(&disp_drv);
+
+  lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
+  lv_label_set_text(label, "----");
+  lv_obj_align(label, NULL, LV_ALIGN_IN_RIGHT_MID, -30, 0);
+
   int fd = open("/dev/vl53l0x0", O_RDONLY);
   if (fd > 0) {
     int fdFlags = fcntl(0, F_GETFL, 0);
-    printf("flags: %08X\n", fdFlags);
     fcntl(0, F_SETFL, fdFlags | O_NONBLOCK);
     VL53L0X_data_t data;
     clock_t holdoff = clock();
-    for ( ; ; ) {
+    uint32_t lvLastUpdate = holdoff / CLOCKS_PER_SEC * 1000;
+    for ( uint8_t state = STATE_RUN; state & STATE_RUN; ) {
       uint8_t key=0;
       if (1 == read(0, &key, 1)) {
         VL53L0X_ioctl_t io;
@@ -50,9 +68,13 @@ int vl53l0x_main(int argc, char *argv[])
             state |= STATE_STOP;
             break;
 
+          case 'l':
+            state ^= STATE_LOG;
+            break;
+
           case 'q':
           case 'Q':
-            state ^= STATE_QUIT;
+            state ^= STATE_RUN;
             break;
 
           case 'r':
@@ -72,17 +94,30 @@ int vl53l0x_main(int argc, char *argv[])
         if (holdoff < clock()) {
           int rc = read(fd, &data, sizeof(data));
           if (rc == sizeof(data)) {
-            if (0 == data.status) {
-              printf("%6ld: %d - %4d (%4d)\n", clock(), data.status, data.range, data.maxRange);
+            char buf[16];
+            if (4 != data.status) {
+              sprintf(buf, "%4d", data.range);
+              if (state & STATE_LOG) {
+                printf("%6ld: %d - %4d (%4d)\n", clock(), data.status, data.range, data.maxRange);
+              }
             } else {
-              printf("%6ld: %d - ---- (%4d)\n", clock(), data.status, /*data.range,*/ data.maxRange);
+              sprintf(buf, "----");
+              if (state & STATE_LOG) {
+                printf("%6ld: %d - ---- (%4d)\n", clock(), data.status, /*data.range,*/ data.maxRange);
+              }
             }
+            lv_label_set_text(label, buf);
           } else {
             fprintf(stderr, "attempted to read %d bytes - received %d\n", sizeof(data), rc);
           }
-          holdoff = clock() + CLOCKS_PER_SEC / 4;
+          holdoff = clock() + CLOCKS_PER_SEC / 5;
+          lv_obj_invalidate(label);
         }
       }
+      uint32_t ms = clock() * 1000 / CLOCKS_PER_SEC;
+      lv_tick_inc(ms - lvLastUpdate);
+      lvLastUpdate = ms;
+      lv_task_handler();
     }
 
     fcntl(0, F_SETFL, fdFlags);

@@ -44,7 +44,7 @@ PRIORITY  = 100
 STACKSIZE = 2048
 
 ASRCS =
-CSRCS =
+CSRCS = fbdev.c
 CXXSRCS =
 MAINSRC = vl53l0x.cxx
 
@@ -54,5 +54,9 @@ PROGNAME = $(CONFIG_VL53L0X_PROGNAME)
 APPNAME = vl53l0x
 
 MODULE = CONFIG_VL53L0X
+
+LVGLDIR=$(APPDIR)/graphics/littlevgl/lvgl
+CFLAGS   += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" "$(LVGLDIR)"}
+CXXFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" "$(LVGLDIR)"}
 
 include $(APPDIR)/Application.mk
