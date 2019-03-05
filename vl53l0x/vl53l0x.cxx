@@ -14,6 +14,29 @@
 #define STATE_STOP 0x02
 #define STATE_LOG  0x04
 
+
+static const char* vl53l0xTypeString(unsigned type)
+{
+  if (VL53L0X_PRODUCT_TYPE_VL53L0X == type) {
+    return "VL53L0X";
+  }
+  if (VL53L0X_PRODUCT_TYPE_VL53L1X == type) {
+    return "VL53L1X";
+  }
+  return "------";
+}
+
+static const char* vl53l0xModeString(unsigned mode)
+{
+  if (VL53L0X_PROFILE_MODE_SINGLE == mode) {
+    return "single";
+  }
+  if (VL53L0X_PROFILE_MODE_CONT == mode) {
+    return "continuous";
+  }
+  return "-----";
+}
+
 extern "C"
 {
 
@@ -36,7 +59,7 @@ int vl53l0x_main(int argc, char *argv[])
 
   lv_obj_t *label = lv_label_create(lv_scr_act(), NULL);
   lv_label_set_text(label, "----");
-  lv_obj_align(label, NULL, LV_ALIGN_IN_RIGHT_MID, -30, 0);
+  lv_obj_align(label, NULL, LV_ALIGN_IN_RIGHT_MID, -40, 0);
 
   int fd = open("/dev/vl53l0x0", O_RDONLY);
   if (fd > 0) {
@@ -56,16 +79,42 @@ int vl53l0x_main(int argc, char *argv[])
           case '1':
           case '2':
           case '3':
-            io.val = key - '0';
+            io.profile.id = key - '0';
+            io.profile.mode = VL53L0X_PROFILE_MODE_SINGLE;
             rc = ioctl(fd, VL53L0X_IOCTL_PROFILE | VL53L0X_IOCTL_WRITE, reinterpret_cast<uintptr_t>(&io));
             printf("Set profile to %d: %d (%d)\n", key - '0', rc, io.ret);
             state |= STATE_STOP;
             break;
 
-          case 'd':
-            rc = ioctl(fd, VL53L0X_IOCTL_DUMP_CONFIG, reinterpret_cast<uintptr_t>(&io));
-            printf("Dump config: %d (%d)\n", rc, io.ret);
-            state |= STATE_STOP;
+          case '4':
+          case '5':
+          case '6':
+          case '7':
+          case '8':
+          case '9':
+            io.profile.id = key - '4';
+            rc = ioctl(fd, VL53L0X_IOCTL_PROFILE | VL53L0X_IOCTL_READ, reinterpret_cast<uintptr_t>(&io));
+            if (rc) {
+              printf("Getting profile failed: %d\n", rc);
+            } else {
+              printf("Profile %d, %s\n", io.profile.id, vl53l0xModeString(io.profile.mode));
+              printf("   sigma final range        : %d - %08X\n", (io.profile.param.checkEnable & VL53L0X_CHECK_ENABLE_SIGMA_FINAL_RANGE ? 1 : 0), io.profile.param.sigmaFinalRange);
+              printf("   signal rate final range  : %d - %08X\n", (io.profile.param.checkEnable & VL53L0X_CHECK_ENABLE_SIGNAL_RATE_FINAL_RANGE ? 1 : 0), io.profile.param.signalRateFinalRange);
+              printf("   range ignore threshold   : %d - %08X\n", (io.profile.param.checkEnable & VL53L0X_CHECK_ENABLE_RANGE_IGN_THRESHOLD ? 1 : 0), io.profile.param.rangeIgnoreThreshold);
+              printf("   measurement timing budget: %d\n", io.profile.param.measurementTimingBudget);
+              printf("   vcsel period range       : %d / %d\n", io.profile.param.vcselPeriodPreRange, io.profile.param.vcselPeriodFinalRange);
+            }
+            break;
+
+          case 'i':
+            rc = ioctl(fd,  VL53L0X_IOCTL_INFO | VL53L0X_IOCTL_READ, reinterpret_cast<uintptr_t>(&io));
+            if (rc) {
+              printf("Getting info failed: %d\n", rc); 
+            } else {
+              printf("Device: %s  (%s.%d %d.%d)\n", io.info.name, vl53l0xTypeString(io.info.productType), io.info.productType, io.info.versionMajor, io.info.versionMinor);
+              printf("  type: %s\n", io.info.type);
+              printf("    id: %s\n", io.info.id);
+            }
             break;
 
           case 'l':
@@ -109,6 +158,7 @@ int vl53l0x_main(int argc, char *argv[])
             lv_label_set_text(label, buf);
           } else {
             fprintf(stderr, "attempted to read %d bytes - received %d\n", sizeof(data), rc);
+            sleep(3);
           }
           holdoff = clock() + CLOCKS_PER_SEC / 5;
           lv_obj_invalidate(label);
