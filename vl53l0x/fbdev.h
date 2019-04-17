@@ -42,7 +42,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <graphics/lvgl.h>
 
 #ifdef __cplusplus
 extern "C"
